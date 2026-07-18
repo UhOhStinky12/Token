@@ -1,0 +1,123 @@
+/* Live Token Meter styles */
+
+.ltm-settings .ltm-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+}
+
+.ltm-settings .ltm-num {
+    width: 70px;
+}
+
+.ltm-section-title {
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    opacity: 0.85;
+}
+
+.ltm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+
+.ltm-table td {
+    padding: 2px 4px;
+}
+
+.ltm-table td:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ltm-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.ltm-bar-outer {
+    width: 100%;
+    height: 10px;
+    border-radius: 5px;
+    background: rgba(128, 128, 128, 0.25);
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.ltm-bar-outer-small {
+    height: 6px;
+}
+
+.ltm-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 5px;
+    transition: width 0.2s ease, background-color 0.2s ease;
+    background: #4caf50;
+}
+
+.ltm-bar-fill.ltm-ok {
+    background: #4caf50;
+}
+
+.ltm-bar-fill.ltm-warn {
+    background: #e0a800;
+}
+
+.ltm-bar-fill.ltm-danger {
+    background: #d9534f;
+}
+
+.ltm-context-label {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-top: 2px;
+    text-align: right;
+}
+
+/* Floating widget */
+
+.ltm-widget {
+    position: fixed;
+    right: 16px;
+    bottom: 90px;
+    z-index: 6000;
+    background: var(--SmartThemeBlurTintColor, rgba(30, 30, 30, 0.9));
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 8px;
+    padding: 6px 10px;
+    width: 130px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    font-size: 0.8em;
+    user-select: none;
+}
+
+.ltm-widget.ltm-dragging {
+    opacity: 0.85;
+}
+
+.ltm-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: bold;
+    cursor: grab;
+    font-size: 1.05em;
+}
+
+.ltm-widget-header:active {
+    cursor: grabbing;
+}
+
+.ltm-widget-label {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-top: 2px;
+    text-align: right;
+}
