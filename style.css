@@ -11,6 +11,13 @@
     width: 70px;
 }
 
+.ltm-note {
+    font-size: 0.78em;
+    opacity: 0.7;
+    margin: 6px 0;
+    line-height: 1.35;
+}
+
 .ltm-section-title {
     font-weight: bold;
     margin-top: 10px;
@@ -83,19 +90,23 @@
 /* Floating widget */
 
 .ltm-widget {
-    position: fixed;
+    position: fixed !important;
     right: 16px;
     bottom: 90px;
-    z-index: 6000;
-    background: var(--SmartThemeBlurTintColor, rgba(30, 30, 30, 0.9));
+    z-index: 2147483000;
+    background: var(--SmartThemeBlurTintColor, rgba(30, 30, 30, 0.95));
     color: var(--SmartThemeBodyColor, #eee);
-    border: 1px solid rgba(128, 128, 128, 0.4);
+    border: 1px solid rgba(128, 128, 128, 0.5);
     border-radius: 8px;
     padding: 6px 10px;
     width: 130px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    min-height: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
     font-size: 0.8em;
     user-select: none;
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
 }
 
 .ltm-widget.ltm-dragging {

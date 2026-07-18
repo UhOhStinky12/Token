@@ -62,6 +62,7 @@ const defaultChatStats = () => ({
     completionTokens: 0,
     lastPrompt: 0,
     lastCompletion: 0,
+    lastBudget: 0,
     messagesCounted: 0,
 });
 
@@ -173,17 +174,23 @@ function buildSettingsPanelHtml() {
 
                 <div class="ltm-section-title">Current Chat</div>
                 <table class="ltm-table">
-                    <tr><td>Prompt tokens</td><td id="ltm-panel-prompt">0</td></tr>
-                    <tr><td>Completion tokens</td><td id="ltm-panel-completion">0</td></tr>
-                    <tr><td>Total tokens</td><td id="ltm-panel-total">0</td></tr>
+                    <tr><td>Chat-history tokens sent</td><td id="ltm-panel-prompt">0</td></tr>
+                    <tr><td>Response tokens received</td><td id="ltm-panel-completion">0</td></tr>
+                    <tr><td>Total</td><td id="ltm-panel-total">0</td></tr>
                 </table>
 
                 <div class="ltm-section-title">Last Request</div>
                 <table class="ltm-table">
-                    <tr><td>Prompt</td><td id="ltm-panel-last-prompt">0</td></tr>
+                    <tr><td>Chat history</td><td id="ltm-panel-last-prompt">0</td></tr>
                     <tr><td>Response</td><td id="ltm-panel-last-completion">0</td></tr>
-                    <tr><td>Total</td><td id="ltm-panel-last-total">0</td></tr>
+                    <tr><td>Context budget available</td><td id="ltm-panel-last-budget">0</td></tr>
                 </table>
+                <div class="ltm-note">
+                    "Chat history" only counts the visible chat messages, not character card,
+                    persona, or world info tokens - SillyTavern doesn't expose those to
+                    extensions. For the exact full breakdown, use SillyTavern's own
+                    <b>Prompt Itemization</b> (the ⓘ icon on a message).
+                </div>
 
                 <div class="ltm-section-title">Current Context (live estimate)</div>
                 <div class="ltm-bar-outer">
@@ -195,6 +202,7 @@ function buildSettingsPanelHtml() {
                     <button id="ltm-reset" class="menu_button">Reset Chat Statistics</button>
                     <button id="ltm-export" class="menu_button">Export</button>
                     <button id="ltm-import" class="menu_button">Import</button>
+                    <button id="ltm-recreate-widget" class="menu_button">Fix / Recreate Widget</button>
                     <input id="ltm-import-file" type="file" accept="application/json" style="display:none" />
                 </div>
             </div>
@@ -223,11 +231,15 @@ function injectUiOnce() {
         if (container) {
             container.insertAdjacentHTML('beforeend', buildSettingsPanelHtml());
             wireSettingsPanel();
+        } else {
+            console.warn(`[${MODULE_NAME}] Could not find #extensions_settings2 or #extensions_settings - settings panel not injected.`);
         }
     }
     if (!document.getElementById('ltm-widget')) {
         document.body.insertAdjacentHTML('beforeend', buildFloatingWidgetHtml());
         wireFloatingWidget();
+        const el = document.getElementById('ltm-widget');
+        console.log(`[${MODULE_NAME}] Floating widget injected:`, !!el, el ? el.getBoundingClientRect() : null);
     }
 }
 
@@ -313,6 +325,7 @@ function wireSettingsPanel() {
             stats.completionTokens = Number(data.completionTokens) || 0;
             stats.lastPrompt = Number(data.lastPrompt) || 0;
             stats.lastCompletion = Number(data.lastCompletion) || 0;
+            stats.lastBudget = Number(data.lastBudget) || 0;
             saveChatStatsDebounced();
             refreshUI();
             toastr.success('Statistics imported.');
@@ -320,6 +333,23 @@ function wireSettingsPanel() {
             console.error(`[${MODULE_NAME}] Import failed`, err);
             toastr.error('Could not import that file - is it valid JSON?');
         }
+    });
+
+    document.getElementById('ltm-recreate-widget').addEventListener('click', () => {
+        const existing = document.getElementById('ltm-widget');
+        if (existing) existing.remove();
+        const settings2 = getSettings();
+        settings2.showFloatingWidget = true;
+        settings2.widgetX = null;
+        settings2.widgetY = null;
+        saveSettings();
+        document.getElementById('ltm-floating').checked = true;
+        document.body.insertAdjacentHTML('beforeend', buildFloatingWidgetHtml());
+        wireFloatingWidget();
+        applyEnabledState();
+        refreshUI();
+        toastr.info('Widget recreated at the default position (bottom-right).');
+        console.log(`[${MODULE_NAME}] Widget recreated. If you still don't see it, check the browser console (F12) for errors and report them.`);
     });
 }
 
@@ -408,7 +438,7 @@ async function refreshUI() {
         document.getElementById('ltm-panel-total').textContent = formatNumber(stats.promptTokens + stats.completionTokens);
         document.getElementById('ltm-panel-last-prompt').textContent = formatNumber(stats.lastPrompt);
         document.getElementById('ltm-panel-last-completion').textContent = formatNumber(stats.lastCompletion);
-        document.getElementById('ltm-panel-last-total').textContent = formatNumber(stats.lastPrompt + stats.lastCompletion);
+        document.getElementById('ltm-panel-last-budget').textContent = formatNumber(stats.lastBudget);
 
         const fill = document.getElementById('ltm-panel-bar-fill');
         fill.style.width = `${Math.round(ratio * 100)}%`;
@@ -474,24 +504,72 @@ function registerEvents() {
     eventSource.on(event_types.GENERATION_STOPPED, refreshUIDebounced);
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
 
+    // Anything that can change the effective max context needs to trigger
+    // a refresh too, or the live meter's denominator goes stale until the
+    // next message. Not all of these exist on every ST version, so guard
+    // each one individually instead of letting one bad key break the rest.
+    const contextAffectingEvents = [
+        'SETTINGS_UPDATED',
+        'MAIN_API_CHANGED',
+        'CHATCOMPLETION_SOURCE_CHANGED',
+        'CHATCOMPLETION_MODEL_CHANGED',
+        'PRESET_CHANGED',
+        'CONNECTION_PROFILE_LOADED',
+        'ONLINE_STATUS_CHANGED',
+    ];
+    for (const key of contextAffectingEvents) {
+        if (event_types[key]) {
+            eventSource.on(event_types[key], refreshUIDebounced);
+        }
+    }
+
     const textarea = document.getElementById('send_textarea');
     if (textarea) {
         textarea.addEventListener('input', debounce(refreshUI, 400));
     }
+
+    // Safety net: settings changes don't always emit an event we can catch
+    // (or the id/selector changes between ST versions). Re-check every few
+    // seconds so the meter can't drift far out of sync. getTokenCountAsync
+    // is cached internally so this stays cheap.
+    setInterval(() => refreshUI(), 5000);
 }
 
 // -------------------------------------------------------------------------
-// Generation interceptor - fires right before every real generation and
-// gives us the exact context size (in tokens) about to be sent.
+// Generation interceptor - fires right before every real generation.
+//
+// IMPORTANT: `contextSize` here is NOT the number of tokens actually used
+// in the prompt. It's the token BUDGET SillyTavern computed for this
+// generation (roughly Context Size - Response Length) - a ceiling, not a
+// measurement. You can confirm this yourself: it matches the "Max Context
+// (Context Size - Response Length)" line in ST's own Prompt Itemization
+// popup exactly, not the "Total Tokens in Prompt" line above it.
+//
+// So instead we tokenize the `chat` array the interceptor gives us, which
+// is the actual finalized list of chat-history messages about to be used
+// for prompt building. That's a real measurement, not a budget - it just
+// doesn't include character card / persona / world info tokens (ST folds
+// those in later, in a step extensions don't get a stable hook into). We
+// show both numbers and label them honestly rather than pretend they're
+// the same thing.
 // -------------------------------------------------------------------------
 
 globalThis.LiveTokenMeter_interceptor = async function (chat, contextSize /*, abort, type */) {
     try {
         const settings = getSettings();
         if (!settings.enabled) return;
+        const { getTokenCountAsync } = SillyTavern.getContext();
+
+        let historyTokens = 0;
+        for (const mes of chat) {
+            if (!mes || typeof mes.mes !== 'string' || !mes.mes) continue;
+            historyTokens += await getTokenCountAsync(mes.mes);
+        }
+
         const stats = getChatStats();
-        stats.lastPrompt = contextSize;
-        stats.promptTokens += contextSize;
+        stats.lastPrompt = historyTokens;
+        stats.lastBudget = Number(contextSize) || 0;
+        stats.promptTokens += historyTokens;
         saveChatStatsDebounced();
     } catch (err) {
         console.error(`[${MODULE_NAME}] interceptor failed`, err);
@@ -505,11 +583,17 @@ globalThis.LiveTokenMeter_interceptor = async function (chat, contextSize /*, ab
 // -------------------------------------------------------------------------
 
 function init() {
-    getSettings();
-    injectUiOnce();
-    applyEnabledState();
-    registerEvents();
-    refreshUI();
+    try {
+        console.log(`[${MODULE_NAME}] Initializing...`);
+        getSettings();
+        injectUiOnce();
+        applyEnabledState();
+        registerEvents();
+        refreshUI();
+        console.log(`[${MODULE_NAME}] Init complete.`);
+    } catch (err) {
+        console.error(`[${MODULE_NAME}] Init failed:`, err);
+    }
 }
 
 jQuery(() => {

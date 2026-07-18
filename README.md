@@ -8,8 +8,9 @@ Built for SillyTavern 1.18.x. Backend-agnostic (tested with LM Studio, works wit
 
 SillyTavern's public extension API doesn't give a stable, documented way to read the raw `usage.prompt_tokens` / `usage.completion_tokens` object a backend like LM Studio returns — that's internal wiring that varies by backend and can change between ST releases. Instead, this extension uses SillyTavern's *own* accounting, which is version-stable and works identically no matter what backend you connect:
 
-- `generate_interceptor` (a documented manifest hook) is called by SillyTavern right before every real generation, and hands the extension the exact `contextSize` (in tokens) about to be sent to the model. This is used for "Last Request" and the cumulative "Prompt tokens" total.
-- `getTokenCountAsync()` (from `SillyTavern.getContext()`) is the same tokenizer SillyTavern itself uses to budget your prompt. The extension uses it to estimate live context usage — including while you're still typing — and to count each new AI reply for the "Completion tokens" total.
+- `generate_interceptor` (a documented manifest hook) is called by SillyTavern right before every real generation, and hands the extension the actual finalized chat-history array about to be used for prompt building. The extension tokenizes that with ST's own tokenizer to get a real chat-history token count.
+- The same hook also passes a `contextSize` number — but that turns out to be the *token budget* SillyTavern computed (roughly Context Size − Response Length), not the number of tokens actually used. It's shown separately, honestly labeled "Context budget available," rather than presented as if it were the real prompt size.
+- `getTokenCountAsync()` (from `SillyTavern.getContext()`) is the same tokenizer SillyTavern itself uses to budget your prompt. The extension uses it to estimate live context usage — including while you're still typing — and to count each new AI reply for the "Response tokens" total.
 - `context.maxContext` is SillyTavern's own current max-context value, so the meter always matches whatever you have configured (LM Studio's context size, ST's Response settings, etc.) without needing separate configuration.
 
 ## Features
@@ -53,8 +54,9 @@ Then update `homePage` in `manifest.json` to point at that URL (optional, cosmet
 
 ## Notes / limitations
 
-- The live context bar is an **estimate** based on visible chat messages (plus your current draft text). It doesn't include character card fields, world info, or instruct-template overhead, so it will read a bit lower than the exact number actually sent. The "Last Request" numbers, by contrast, come straight from ST's own generation pipeline and are exact.
-- Cumulative "Prompt tokens" intentionally counts the *full* context sent on every single generation (not just new tokens since the last turn) — this matches how token usage is normally reported by APIs, since most local/remote backends re-process the whole context each turn.
+- **"Chat history" numbers only count visible chat messages.** SillyTavern doesn't expose character card, persona, or world info tokens to extensions in a stable way, so those aren't included. The "Context budget available" figure (Context Size − Response Length) *is* exact, but it's a ceiling, not a measurement - it stays roughly constant regardless of how much of the chat is actually used. For the full, exact breakdown (description, scenario, persona, world info, everything), use SillyTavern's own built-in **Prompt Itemization** popup (the ⓘ icon on any message) - this extension is meant to complement that with an always-visible live glance, not replace it.
+- Cumulative "Chat-history tokens sent" intentionally counts the *full* chat-history tokens re-sent on every single generation (not just new tokens since the last turn), since that matches how most local/remote backends actually process context each turn.
+- If the floating widget doesn't appear, open the browser console (F12) and look for `[live_token_meter]` log lines - `init()` logs whether it found a place to inject the settings panel and whether the widget element actually landed in the DOM. There's also a **"Fix / Recreate Widget"** button in the settings panel that removes and re-creates it at the default bottom-right position, which clears out any bad saved drag position.
 - Stats live in the chat's metadata, so they travel with the chat file if you export/back it up, and are naturally separate per chat/character.
 
 ## File structure
